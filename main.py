@@ -148,9 +148,10 @@ def main():
     accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y))
     data.reduce_data(0.99)
     for i in range(1, 11):
+        new_model = Model(784, 10)
         print('\nVersion ' + str(i) + ' Size: ' + str(len(data.train_x)))
-        accuracies.append(model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y))
-        predictions = model.predict(i, data.predict_x)
+        accuracies.append(new_model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y))
+        predictions = new_model.predict(i, data.predict_x)
         data.increase_data(predictions, int(original_size * 0.01))
     print(accuracies)
     #model.test(i, data.test_x, data.test_y)
