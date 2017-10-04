@@ -58,14 +58,14 @@ class Model:
                 if epoch % 10 == 0:
                     print('Epoch: ' + str(epoch) + ' Accuracy: ' + '{:.3f}'.format(avg_acc/num_batches)
                       + ' Loss: ' + '{:.4f}'.format(avg_loss/num_batches))
-
+            final_acc = sess.run(accuracy, feed_dict={self.X: test_data, self.Y: test_labels})
             print('Optimization Finished!')
-            print('Testing Accuracy:',
-                  sess.run(accuracy, feed_dict={self.X: test_data, self.Y: test_labels}))
+            print('Testing Accuracy: ', str(final_acc))
             if not os.path.isdir(str(version)):
                 os.mkdir(str(version))
             save_path = saver.save(sess, str(version) + '/model.ckpt')
             print("Model saved in file: %s" % save_path)
+            return final_acc
 
     def test(self, version,test_data, test_labels):
         init = tf.global_variables_initializer()
@@ -124,14 +124,17 @@ class MNIST_Data:
         maxes = np.zeros(len(inputs))
         for i in range(len(inputs)):
             maxes[i] = inputs[i][np.argmax(inputs[i])]
+        indexes = []
         for i in range(num_to_label):
-            index = (min(enumerate(maxes)))[0]
-            maxes[index] = 0.
+            index = np.where(maxes == maxes.min())[0][0]
+            maxes[index] = np.finfo(np.float64).max
             predict = self.predict_x[index]
-            training_data_x = np.append(training_data_x, predict)
-            training_data_y = np.append(training_data_y, [self.predict_y[index]])
-            self.predict_x = np.delete(self.predict_x, index)
-            self.predict_y = np.delete(self.predict_y, index)
+            training_data_x = np.vstack((training_data_x, [predict]))
+            training_data_y = np.vstack((training_data_y, [self.predict_y[index]]))
+            indexes.append(index)
+        for index in -np.sort(-np.asarray(indexes)):
+            self.predict_x = np.delete(self.predict_x, (index), axis=0)
+            self.predict_y = np.delete(self.predict_y, (index), axis=0)
         self.train_x = training_data_x
         self.train_y = training_data_y
 
@@ -141,14 +144,16 @@ def main():
     data = MNIST_Data('mnist_train.csv', 'mnist_test.csv')
     original_size = len(data.train_x)
     print('\nOriginal Size: ' + str(original_size))
-    model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y)
+    accuracies = []
+    accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y))
     data.reduce_data(0.99)
     for i in range(1, 11):
         print('\nVersion ' + str(i) + ' Size: ' + str(len(data.train_x)))
-        model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y)
+        accuracies.append(model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y))
         predictions = model.predict(i, data.predict_x)
         data.increase_data(predictions, int(original_size * 0.01))
-    model.test(i, data.test_x, data.test_y)
+    print(accuracies)
+    #model.test(i, data.test_x, data.test_y)
 
 
 if __name__ == '__main__':
