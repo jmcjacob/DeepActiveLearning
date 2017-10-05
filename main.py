@@ -7,8 +7,8 @@ from itertools import product
 from collections import Counter
 from sklearn.model_selection import train_test_split
 
-
-use_weights = True
+# 0 = No data balancing, 1 = Balanced data selction, 2 = Weighted cost function
+balance = 2
 fineTuning = True
 
 
@@ -52,7 +52,7 @@ class Model:
 
     def train(self, version, data, labels, batch_size, test_data, test_labels, weights=np.ones((0, 0))):
         beta = 0.5
-        if use_weights:
+        if balance == 2:
             loss = self.weighted_crossentropy(y_true=self.Y, y_pred=self.model, weights=weights)
         else:
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.model, labels=self.Y)
@@ -137,29 +137,30 @@ class MNIST_Data:
         self.test_x, self.test_y = np.asarray(test_x), np.asarray(test_y)
 
     def reduce_data(self, percentage):
-        self.train_x, self.predict_x, self.train_y, self.predict_y = \
+        if balance == 1:
+            pass
+        else:
+            self.train_x, self.predict_x, self.train_y, self.predict_y = \
             train_test_split(self.train_x, self.train_y, test_size=percentage)
 
     def increase_data(self, inputs, num_to_label):
-        training_data_x = self.train_x
-        training_data_y = self.train_y
-
-        maxes = np.zeros(len(inputs))
-        for i in range(len(inputs)):
-            maxes[i] = inputs[i][np.argmax(inputs[i])]
-        indexes = []
-        for i in range(num_to_label):
-            index = np.where(maxes == maxes.min())[0][0]
-            maxes[index] = np.finfo(np.float64).max
-            predict = self.predict_x[index]
-            training_data_x = np.vstack((training_data_x, [predict]))
-            training_data_y = np.vstack((training_data_y, [self.predict_y[index]]))
-            indexes.append(index)
-        for index in -np.sort(-np.asarray(indexes)):
-            self.predict_x = np.delete(self.predict_x, (index), axis=0)
-            self.predict_y = np.delete(self.predict_y, (index), axis=0)
-        self.train_x = training_data_x
-        self.train_y = training_data_y
+        if balance == 1:
+            pass
+        else:
+            maxes = np.zeros(len(inputs))
+            for i in range(len(inputs)):
+                maxes[i] = inputs[i][np.argmax(inputs[i])]
+            indexes = []
+            for i in range(num_to_label):
+                index = np.where(maxes == maxes.min())[0][0]
+                maxes[index] = np.finfo(np.float64).max
+                predict = self.predict_x[index]
+                self.train_x = np.vstack((self.train_x, [predict]))
+                self.train_y = np.vstack((self.train_y, [self.predict_y[index]]))
+                indexes.append(index)
+            for index in -np.sort(-np.asarray(indexes)):
+                self.predict_x = np.delete(self.predict_x, (index), axis=0)
+                self.predict_y = np.delete(self.predict_y, (index), axis=0)
 
     def get_weights(self, smooth_factor=0):
         temp_y = []
@@ -187,7 +188,7 @@ def main():
     original_size = len(data.train_x)
     print('\nOriginal Size: ' + str(original_size))
     accuracies = []
-    if use_weights:
+    if balance == 2:
         accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y, data.get_weights()))
     else:
         accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y))
@@ -195,7 +196,7 @@ def main():
     model = Model(784, 10)
     for i in range(1, 11):
         print('\nVersion ' + str(i) + ' Size: ' + str(len(data.train_x)))
-        if use_weights:
+        if balance == 2:
             accuracies.append(model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y,
                                           data.get_weights()))
         else:
