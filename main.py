@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 
 
 use_weights = True
+fineTuning = True
 
 
 class Model:
@@ -191,17 +192,20 @@ def main():
     else:
         accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y))
     data.reduce_data(0.99)
+    model = Model(784, 10)
     for i in range(1, 11):
-        new_model = Model(784, 10)
         print('\nVersion ' + str(i) + ' Size: ' + str(len(data.train_x)))
         if use_weights:
-            accuracies.append(new_model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y,
+            accuracies.append(model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y,
                                           data.get_weights()))
         else:
-            accuracies.append(new_model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y))
-        predictions = model.predict(i, data.predict_x)
-        data.increase_data(predictions, int(original_size * 0.01))
-    print(accuracies)
+            accuracies.append(model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y))
+        if i != 10:
+            predictions = model.predict(i, data.predict_x)
+            data.increase_data(predictions, int(original_size * 0.01))
+        if not fineTuning:
+            model = Model(784, 10)
+    print('\n' + str(accuracies))
 
 
 if __name__ == '__main__':
