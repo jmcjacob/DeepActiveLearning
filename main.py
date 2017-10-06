@@ -169,22 +169,36 @@ class MNISTData:
                                                                                           test_size=percentage)
 
     def increase_data(self, inputs, num_to_label):
+        maxes = np.zeros(len(inputs))
+        for i in range(len(inputs)):
+            maxes[i] = inputs[i][np.argmax(inputs[i])]
+        indexes = []
         if balance == 1:
-            pass
+            num_to_label = int(num_to_label / 10)
+            classification = [[], [], [], [], [], [], [], [], [], []]
+            for i in range(len(maxes)):
+                prediction_class = int(np.argmax(self.predict_y[i]))
+                classification[prediction_class].append([maxes[i], i])
+            for class_maxes in classification:
+                c_maxes, big_indexes = [m[0] for m in class_maxes], [n[1] for n in class_maxes]
+                for i in range(num_to_label):
+                    index = np.where(c_maxes == np.asarray(c_maxes).min())[0][0]
+                    class_maxes[index][0] = np.finfo(np.float64).max
+                    index = big_indexes[index]
+                    self.train_x = np.vstack((self.train_x, [self.predict_x[index]]))
+                    self.train_y = np.vstack((self.train_y, [self.predict_y[index]]))
+                    indexes.append(index)
+            self.predict_x = np.delete(self.predict_x, indexes, axis=0)
+            self.predict_y = np.delete(self.predict_y, indexes, axis=0)
         else:
-            maxes = np.zeros(len(inputs))
-            for i in range(len(inputs)):
-                maxes[i] = inputs[i][np.argmax(inputs[i])]
-            indexes = []
             for i in range(num_to_label):
                 index = np.where(maxes == maxes.min())[0][0]
                 maxes[index] = np.finfo(np.float64).max
                 self.train_x = np.vstack((self.train_x, [self.predict_x[index]]))
                 self.train_y = np.vstack((self.train_y, [self.predict_y[index]]))
                 indexes.append(index)
-            for index in -np.sort(-np.asarray(indexes)):
-                self.predict_x = np.delete(self.predict_x, index, axis=0)
-                self.predict_y = np.delete(self.predict_y, index, axis=0)
+            self.predict_x = np.delete(self.predict_x, indexes, axis=0)
+            self.predict_y = np.delete(self.predict_y, indexes, axis=0)
 
     def get_weights(self, smooth_factor=0):
         temp_y = []
@@ -210,7 +224,7 @@ class MNISTData:
         for i in self.train_y:
             temp_y.append(np.argmax(i))
         counter = Counter(temp_y)
-        print(counter)
+        print('Balance: ' + str(counter))
 
 
 def main():
@@ -224,10 +238,10 @@ def main():
     else:
         accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y))
     data.reduce_data(0.99)
-    data.check_balance()
     model = Model(784, 10)
     for i in range(1, 11):
         print('\nVersion ' + str(i) + ' Size: ' + str(len(data.train_x)))
+        data.check_balance()
         if balance == 2:
             accuracies.append(model.train(i, data.train_x, data.train_y, 100, data.test_x, data.test_y,
                                           data.get_weights()))
@@ -236,7 +250,6 @@ def main():
         if i != 10:
             predictions = model.predict(i, data.predict_x)
             data.increase_data(predictions, int(original_size * 0.01))
-            data.check_balance()
         if not fineTuning:
             model = Model(784, 10)
     print('\n' + str(accuracies))
