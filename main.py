@@ -1,14 +1,17 @@
 import os
 import csv
+import math
+import random
 import numpy as np
 import tensorflow as tf
-import keras.backend as K
+import keras.backend as k
 from itertools import product
 from collections import Counter
 from sklearn.model_selection import train_test_split
 
+
 # 0 = No data balancing, 1 = Balanced data selction, 2 = Weighted cost function
-balance = 2
+balance = 1
 fineTuning = True
 
 
@@ -18,6 +21,7 @@ class Model:
         self.num_classes = num_classes
         self.X = tf.placeholder("float", [None, self.num_input])
         self.Y = tf.placeholder("float", [None, self.num_classes])
+        self.weights, self.biases = {}, {}
         self.model = self.create_model()
 
     def create_model(self):
@@ -36,17 +40,18 @@ class Model:
         layer_2 = tf.add(tf.matmul(layer_1, self.weights['h2']), self.biases['b2'])
         out_layer = tf.matmul(layer_2, self.weights['out']) + self.biases['out']
         return out_layer
-
-    def weighted_crossentropy(self, y_true, y_pred, weights):
+    
+    @staticmethod
+    def weighted_crossentropy(y_true, y_pred, weights):
         nb_cl = len(weights)
-        final_mask = K.zeros_like(y_pred[..., 0])
-        y_pred_max = K.max(y_pred, axis=-1)
-        y_pred_max = K.expand_dims(y_pred_max, axis=-1)
-        y_pred_max_mat = K.equal(y_pred, y_pred_max)
+        final_mask = k.zeros_like(y_pred[..., 0])
+        y_pred_max = k.max(y_pred, axis=-1)
+        y_pred_max = k.expand_dims(y_pred_max, axis=-1)
+        y_pred_max_mat = k.equal(y_pred, y_pred_max)
         for c_p, c_t in product(range(nb_cl), range(nb_cl)):
-            w = K.cast(weights[c_t, c_p], K.floatx())
-            y_p = K.cast(y_pred_max_mat[..., c_p], K.floatx())
-            y_t = K.cast(y_pred_max_mat[..., c_t], K.floatx())
+            w = k.cast(weights[c_t, c_p], k.floatx())
+            y_p = k.cast(y_pred_max_mat[..., c_p], k.floatx())
+            y_t = k.cast(y_pred_max_mat[..., c_t], k.floatx())
             final_mask += w * y_p * y_t
         return tf.nn.softmax_cross_entropy_with_logits(labels=y_true, logits=y_pred) * final_mask
 
@@ -56,8 +61,8 @@ class Model:
             loss = self.weighted_crossentropy(y_true=self.Y, y_pred=self.model, weights=weights)
         else:
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.model, labels=self.Y)
-        loss += beta + tf.nn.l2_loss(self.weights['h2']) + beta + tf.nn.l2_loss(self.biases['b2']) + \
-                beta + tf.nn.l2_loss(self.weights['out']) + beta + tf.nn.l2_loss(self.biases['out'])
+        loss += beta + tf.nn.l2_loss(self.weights['h2']) + beta + tf.nn.l2_loss(self.biases['b2'])
+        loss += beta + tf.nn.l2_loss(self.weights['out']) + beta + tf.nn.l2_loss(self.biases['out'])
         loss = tf.reduce_mean(loss)
         optimizer = tf.train.AdamOptimizer(learning_rate=0.1).minimize(loss)
         correct_pred = tf.equal(tf.argmax(self.model, 1), tf.argmax(self.Y, 1))
@@ -79,8 +84,9 @@ class Model:
                     avg_loss += cost
                     avg_acc += acc
                 if epoch % 10 == 0:
-                    print('Epoch: ' + str(epoch) + ' Accuracy: ' + '{:.3f}'.format(avg_acc/num_batches)
-                      + ' Loss: ' + '{:.4f}'.format(avg_loss/num_batches))
+                    message = 'Epoch: ' + str(epoch) + ' Accuracy: ' + '{:.3f}'.format(avg_acc/num_batches)
+                    message += ' Loss: ' + '{:.4f}'.format(avg_loss/num_batches)
+                    print(message)
             final_acc = sess.run(accuracy, feed_dict={self.X: test_data, self.Y: test_labels})
             print('Optimization Finished!')
             print('Testing Accuracy: ', str(final_acc))
@@ -90,7 +96,7 @@ class Model:
             print("Model saved in file: %s" % save_path)
             return final_acc
 
-    def test(self, version,test_data, test_labels):
+    def test(self, version, test_data, test_labels):
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
         with tf.Session() as sess:
@@ -111,7 +117,7 @@ class Model:
             return predictions
 
 
-class MNIST_Data:
+class MNISTData:
     def __init__(self, train_file, test_file):
         train_x, train_y = [], []
         test_x, test_y = [], []
@@ -135,13 +141,32 @@ class MNIST_Data:
 
         self.train_x, self.train_y = np.asarray(train_x), np.asarray(train_y)
         self.test_x, self.test_y = np.asarray(test_x), np.asarray(test_y)
+        self.predict_x, self.predict_y = [], []
 
     def reduce_data(self, percentage):
         if balance == 1:
-            pass
+            elements = math.ceil((len(self.train_y) * percentage / 100) / 10)
+            indexes = np.array([])
+            for classification in range(10):
+                temp_indexs = []
+                for i in range(len(self.train_y)):
+                    if np.argmax(self.train_y[i]) == classification:
+                        temp_indexs.append(i)
+                indexes = np.append(indexes, random.sample(temp_indexs, elements))
+            indexes = -np.sort(-indexes)
+            delete_indexes = []
+            for i in range(len(self.train_x)-1, -1, -1):
+                if i not in indexes:
+                    self.predict_x.append(self.train_x[i])
+                    self.predict_y.append(self.train_y[i])
+                    delete_indexes.append(i)
+            self.train_x = np.delete(self.train_x, delete_indexes, axis=0)
+            self.train_y = np.delete(self.train_y, delete_indexes, axis=0)
+            self.predict_x, self.predict_y = np.asarray(self.predict_x), np.asarray(self.predict_y)
         else:
-            self.train_x, self.predict_x, self.train_y, self.predict_y = \
-            train_test_split(self.train_x, self.train_y, test_size=percentage)
+            self.train_x, self.predict_x, self.train_y, self.predict_y = train_test_split(self.train_x,
+                                                                                          self.train_y,
+                                                                                          test_size=percentage)
 
     def increase_data(self, inputs, num_to_label):
         if balance == 1:
@@ -154,13 +179,12 @@ class MNIST_Data:
             for i in range(num_to_label):
                 index = np.where(maxes == maxes.min())[0][0]
                 maxes[index] = np.finfo(np.float64).max
-                predict = self.predict_x[index]
-                self.train_x = np.vstack((self.train_x, [predict]))
+                self.train_x = np.vstack((self.train_x, [self.predict_x[index]]))
                 self.train_y = np.vstack((self.train_y, [self.predict_y[index]]))
                 indexes.append(index)
             for index in -np.sort(-np.asarray(indexes)):
-                self.predict_x = np.delete(self.predict_x, (index), axis=0)
-                self.predict_y = np.delete(self.predict_y, (index), axis=0)
+                self.predict_x = np.delete(self.predict_x, index, axis=0)
+                self.predict_y = np.delete(self.predict_y, index, axis=0)
 
     def get_weights(self, smooth_factor=0):
         temp_y = []
@@ -169,8 +193,8 @@ class MNIST_Data:
         counter = Counter(temp_y)
         if smooth_factor > 0:
             p = max(counter.values()) * smooth_factor
-            for k in counter.keys():
-                counter[k] += p
+            for key in counter.keys():
+                counter[key] += p
         majority = max(counter.values())
         weights = {cls: float(majority / count) for cls, count in counter.items()}
 
@@ -181,18 +205,26 @@ class MNIST_Data:
             final_weights[class_idx][0] = class_weight
         return final_weights
 
+    def check_balance(self):
+        temp_y = []
+        for i in self.train_y:
+            temp_y.append(np.argmax(i))
+        counter = Counter(temp_y)
+        print(counter)
+
 
 def main():
-    model = Model(784, 10)
-    data = MNIST_Data('mnist_train.csv', 'mnist_test.csv')
+    data = MNISTData('mnist_train.csv', 'mnist_test.csv')
     original_size = len(data.train_x)
     print('\nOriginal Size: ' + str(original_size))
     accuracies = []
+    model = Model(784, 10)
     if balance == 2:
         accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y, data.get_weights()))
     else:
         accuracies.append(model.train(0, data.train_x, data.train_y, 100, data.test_x, data.test_y))
     data.reduce_data(0.99)
+    data.check_balance()
     model = Model(784, 10)
     for i in range(1, 11):
         print('\nVersion ' + str(i) + ' Size: ' + str(len(data.train_x)))
@@ -204,6 +236,7 @@ def main():
         if i != 10:
             predictions = model.predict(i, data.predict_x)
             data.increase_data(predictions, int(original_size * 0.01))
+            data.check_balance()
         if not fineTuning:
             model = Model(784, 10)
     print('\n' + str(accuracies))
