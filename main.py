@@ -3,17 +3,20 @@ import csv
 import math
 import random
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 import keras.backend as k
 from itertools import product
 from collections import Counter
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
 
 # 0 = No data balancing, 1 = Balanced data selction, 2 = Weighted cost function
 balance = 2
 # 0 = No Fine Tuning, 1 = Data selection adds to training data, 2 = Data selection becomes training set
-fineTuning = 2
+fineTuning = 0
 
 
 class Model:
@@ -89,6 +92,8 @@ class Model:
                     message += ' Loss: ' + '{:.4f}'.format(avg_loss/num_batches)
                     print(message)
             final_acc = sess.run(accuracy, feed_dict={self.X: test_data, self.Y: test_labels})
+            predictions = sess.run(tf.nn.softmax(self.model), feed_dict={self.X: test_data})
+            self.confusion_matrix(predictions, test_labels)
             print('Optimization Finished!')
             print('Testing Accuracy: ', str(final_acc))
             if not os.path.isdir(str(version)):
@@ -116,6 +121,24 @@ class Model:
             saver.restore(sess, str(version) + '/model.ckpt')
             predictions = sess.run(self.model, feed_dict={self.X: data})
             return predictions
+
+    @staticmethod
+    def confusion_matrix(predictions, labels):
+        y_actu = np.zeros(len(labels))
+        for i in range(len(labels)):
+            for j in range(len(labels[i])):
+                if labels[i][j] == 1.00:
+                    y_actu[i] = j
+        y_pred = np.zeros(len(predictions))
+        for i in range(len(predictions)):
+            y_pred[i] = np.argmax(predictions[i])
+
+        p_labels = pd.Series(y_pred)
+        t_labels = pd.Series(y_actu)
+        df_confusion = pd.crosstab(t_labels, p_labels, rownames=['Actual'], colnames=['Predicted'], margins=True)
+        print('\nAccuracy = ' + str(accuracy_score(y_true=y_actu, y_pred=y_pred, normalize=True)) + '\n')
+        print(df_confusion)
+        print('\n' + str(classification_report(y_actu, y_pred, digits=4)))
 
 
 class MNISTData:
