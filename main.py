@@ -11,8 +11,9 @@ from sklearn.model_selection import train_test_split
 
 
 # 0 = No data balancing, 1 = Balanced data selction, 2 = Weighted cost function
-balance = 1
-fineTuning = True
+balance = 2
+# 0 = No Fine Tuning, 1 = Data selection adds to training data, 2 = Data selection becomes training set
+fineTuning = 2
 
 
 class Model:
@@ -173,6 +174,9 @@ class MNISTData:
         for i in range(len(inputs)):
             maxes[i] = inputs[i][np.argmax(inputs[i])]
         indexes = []
+        if fineTuning == 2:
+            self.train_x = np.zeros((0,784))
+            self.train_y = np.zeros((0,10))
         if balance == 1:
             num_to_label = int(num_to_label / 10)
             classification = [[], [], [], [], [], [], [], [], [], []]
@@ -250,7 +254,7 @@ def main():
         if i != 10:
             predictions = model.predict(i, data.predict_x)
             data.increase_data(predictions, int(original_size * 0.01))
-        if not fineTuning:
+        if fineTuning == 0:
             model = Model(784, 10)
     print('\n' + str(accuracies))
 
